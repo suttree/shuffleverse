@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Shuffle</title>
+<style>
+  :root {
+    --bg-1: #1b1a2b;
+    --bg-2: #221f36;
+    --p1-color: #ff9ecb;
+    --p1-light: #ffd3e8;
+    --p2-color: #8ecdf0;
+    --p2-light: #c9ecff;
+    --sunrise: #ffd6a5;
+    --sunset: #cdb4db;
+    --text: #f4f1ff;
+    --panel: rgba(255,255,255,0.06);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: radial-gradient(circle at 30% 20%, var(--bg-2), var(--bg-1) 70%);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    color: var(--text);
+    padding: 16px;
+    overflow-x: hidden;
+  }
+  #starfield {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    overflow: hidden;
+    pointer-events: none;
+  }
+  #starfield .star {
+    position: absolute;
+    background: #fff;
+    border-radius: 50%;
+    animation: twinkle var(--dur) ease-in-out infinite;
+    animation-delay: var(--delay);
+  }
+  @keyframes twinkle {
+    0%, 100% { opacity: var(--min-o); transform: scale(1); }
+    50% { opacity: var(--max-o); transform: scale(1.3); }
+  }
+  #app {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+  }
+  h1 {
+    margin: 0;
+    font-size: 22px;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    font-weight: 600;
+    background: linear-gradient(90deg, var(--sunrise), var(--p1-color), var(--sunset), var(--p2-color));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  #hud {
+    display: flex;
+    justify-content: space-between;
+    width: 100%;
+    max-width: 1100px;
+    font-size: 15px;
+  }
+  .score-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 8px 20px;
+    border-radius: 16px;
+    background: var(--panel);
+    backdrop-filter: blur(6px);
+    min-width: 110px;
+    border: 1px solid rgba(255,255,255,0.08);
+  }
+  .score-box .label { font-size: 11px; opacity: 0.75; text-transform: uppercase; letter-spacing: 1.5px; }
+  .score-box .value { font-size: 30px; font-weight: 700; }
+  #p1-box .value { color: var(--p1-color); }
+  #p2-box .value { color: var(--p2-color); }
+  #p1-box { box-shadow: 0 0 0 1px rgba(255,158,203,0.15) inset; }
+  #p2-box { box-shadow: 0 0 0 1px rgba(142,205,240,0.15) inset; }
+  .tokens-left { font-size: 11px; opacity: 0.55; }
+  #status {
+    font-size: 14px;
+    min-height: 20px;
+    text-align: center;
+    opacity: 0.9;
+  }
+  #board-wrap {
+    position: relative;
+    width: 100%;
+    max-width: 1100px;
+  }
+  canvas {
+    display: block;
+    width: 100%;
+    height: auto;
+    touch-action: none;
+    cursor: grab;
+  }
+  #restart {
+    margin-top: 4px;
+    background: var(--panel);
+    color: var(--text);
+    border: 1px solid rgba(255,255,255,0.15);
+    padding: 9px 20px;
+    border-radius: 20px;
+    font-size: 13px;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+  }
+  #restart:hover { background: rgba(255,255,255,0.12); }
+  #overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(20,18,32,0.78);
+    backdrop-filter: blur(3px);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    border-radius: 28px;
+    gap: 14px;
+  }
+  #overlay.show { display: flex; }
+  #overlay h2 { margin: 0; font-size: 28px; text-align: center; padding: 0 20px; }
+  #overlay button {
+    background: linear-gradient(90deg, var(--p1-color), var(--p2-color));
+    color: #1b1a2b;
+    border: none;
+    padding: 10px 24px;
+    border-radius: 20px;
+    font-size: 14px;
+    cursor: pointer;
+    font-weight: 700;
+  }
+</style>
+</head>
+<body>
+  <div id="starfield"></div>
+  <div id="app">
+    <h1>Shuffle</h1>
+    <div id="hud">
+      <div class="score-box" id="p1-box">
+        <div class="label">You</div>
+        <div class="value" id="p1-score">0</div>
+        <div class="tokens-left" id="p1-left">5 tokens left</div>
+      </div>
+      <div class="score-box" id="p2-box">
+        <div class="label">Computer</div>
+        <div class="value" id="p2-score">0</div>
+        <div class="tokens-left" id="p2-left">5 tokens left</div>
+      </div>
+    </div>
+    <div id="status">Your turn — drag back from your token and release to shoot</div>
+    <div id="board-wrap">
+      <canvas id="board" width="1200" height="680"></canvas>
+      <div id="overlay">
+        <h2 id="overlay-title">Game Over</h2>
+        <button id="overlay-restart">Play Again</button>
+      </div>
+    </div>
+    <button id="restart">Restart Game</button>
+  </div>
+
+<script>
+(function initStarfield() {
+  const field = document.getElementById('starfield');
+  const COUNT = 160;
+  const frag = document.createDocumentFragment();
+  for (let i = 0; i < COUNT; i++) {
+    const star = document.createElement('div');
+    star.className = 'star';
+    const size = (Math.random() * 1.8 + 0.6).toFixed(2);
+    star.style.left = `${(Math.random() * 100).toFixed(2)}%`;
+    star.style.top = `${(Math.random() * 100).toFixed(2)}%`;
+    star.style.width = `${size}px`;
+    star.style.height = `${size}px`;
+    star.style.setProperty('--dur', `${(Math.random() * 3 + 2).toFixed(2)}s`);
+    star.style.setProperty('--delay', `${(Math.random() * 4).toFixed(2)}s`);
+    star.style.setProperty('--min-o', (Math.random() * 0.2 + 0.1).toFixed(2));
+    star.style.setProperty('--max-o', (Math.random() * 0.5 + 0.5).toFixed(2));
+    frag.appendChild(star);
+  }
+  field.appendChild(frag);
+})();
+</script>
+<script>
+const canvas = document.getElementById('board');
+const ctx = canvas.getContext('2d');
+
+// Physics runs in a flat "logical" coordinate space — simple and robust.
+// The board surface renders bent along a gentle circular arc (sunrise to
+// sunset), via toScreen(); tokens and shots render with a flat mapping
+// (flatToScreen()/flatToLogical()) so they still travel in straight lines.
+const W = 960, H = 460;
+const CENTER_X = W / 2;
+const CENTER_Y = H / 2;
+const RAIL = 16;                 // margin between logical edge and the capsule outline
+const CAP_R = (H - RAIL * 2) / 2; // radius of the curved end caps
+const BODY_LEFT_X = RAIL + CAP_R; // where the left curve meets the straight body
+const BODY_RIGHT_X = W - RAIL - CAP_R;
+const TOKEN_R = 18;
+const FRICTION = 0.985;
+const STOP_SPEED = 0.06;
+const MAX_PULL = 130;
+const MAX_SPEED = 22;
+
+// ---- Arc transform (logical space -> curved screen space) ----
+const CANVAS_W = canvas.width, CANVAS_H = canvas.height;
+const ARC_SAGITTA = 180; // how far the centerline bulges upward across the full width
+const ARC_HALF_W = W / 2;
+const ARC_R = (ARC_HALF_W * ARC_HALF_W + ARC_SAGITTA * ARC_SAGITTA) / (2 * ARC_SAGITTA);
+const ARC_THETA_MAX = Math.asin(ARC_HALF_W / ARC_R);
+const ARC_CX = CANVAS_W / 2;
+const ARC_APEX_Y = 300; // screen y of the centerline at the arc's peak (x = CENTER_X)
+const ARC_CY = ARC_APEX_Y + ARC_R;
+
+function toScreen(x, y) {
+  const theta = ((x - CENTER_X) / ARC_HALF_W) * ARC_THETA_MAX;
+  const dy = y - CENTER_Y;
+  const r = ARC_R - dy;
+  return {
+    x: ARC_CX + r * Math.sin(theta),
+    y: ARC_CY - r * Math.cos(theta),
+  };
+}
+
+// Tokens and shots render with a flat (unwarped) mapping, aligned to the arc's
+// apex, so pucks travel in true straight lines while only the board surface
+// underneath them is curved.
+function flatToScreen(x, y) {
+  return { x: ARC_CX + (x - CENTER_X), y: ARC_APEX_Y + (y - CENTER_Y) };
+}
+function flatToLogical(sx, sy) {
+  return { x: sx - ARC_CX + CENTER_X, y: sy - ARC_APEX_Y + CENTER_Y };
+}
+
+// Build a screen-space polyline tracing the capsule outline by sampling the
+// logical boundary (straight rails + semicircular caps) and warping each point.
+function boundaryScreenPoints() {
+  const pts = [];
+  const CAP_STEPS = 28;
+  const EDGE_STEPS = 20;
+  for (let i = 0; i <= EDGE_STEPS; i++) {
+    const x = BODY_LEFT_X + ((BODY_RIGHT_X - BODY_LEFT_X) * i) / EDGE_STEPS;
+    pts.push(toScreen(x, RAIL));
+  }
+  for (let i = 0; i <= CAP_STEPS; i++) {
+    const a = -Math.PI / 2 + (Math.PI * i) / CAP_STEPS;
+    pts.push(toScreen(BODY_RIGHT_X + CAP_R * Math.cos(a), CENTER_Y + CAP_R * Math.sin(a)));
+  }
+  for (let i = 0; i <= EDGE_STEPS; i++) {
+    const x = BODY_RIGHT_X - ((BODY_RIGHT_X - BODY_LEFT_X) * i) / EDGE_STEPS;
+    pts.push(toScreen(x, H - RAIL));
+  }
+  for (let i = 0; i <= CAP_STEPS; i++) {
+    const a = Math.PI / 2 + (Math.PI * i) / CAP_STEPS;
+    pts.push(toScreen(BODY_LEFT_X + CAP_R * Math.cos(a), CENTER_Y + CAP_R * Math.sin(a)));
+  }
+  return pts;
+}
+
+function pathFromPoints(pts) {
+  ctx.beginPath();
+  ctx.moveTo(pts[0].x, pts[0].y);
+  for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+  ctx.closePath();
+}
+
+let tokens = [];
+let currentPlayer = 1; // 1 = human ("You"), 2 = computer
+let shotsTaken = { 1: 0, 2: 0 };
+const MAX_SHOTS = 5;
+let shotsAllowed = { 1: MAX_SHOTS, 2: MAX_SHOTS }; // overshooting off the opponent's end grants them +1
+let activeToken = null;
+let dragging = false;
+let dragStart = null;
+let dragCurrent = null;
+let gameOver = false;
+let awaitingSettle = false;
+let pendingMessage = null;
+
+const p1ScoreEl = document.getElementById('p1-score');
+const p2ScoreEl = document.getElementById('p2-score');
+const p1LeftEl = document.getElementById('p1-left');
+const p2LeftEl = document.getElementById('p2-left');
+const statusEl = document.getElementById('status');
+const overlay = document.getElementById('overlay');
+const overlayTitle = document.getElementById('overlay-title');
+
+function spawnTokenForCurrentPlayer() {
+  if (gameOver) return;
+  if (shotsTaken[currentPlayer] >= shotsAllowed[currentPlayer]) {
+    switchPlayerOrEnd();
+    return;
+  }
+  const x = currentPlayer === 1 ? RAIL + 46 : W - RAIL - 46;
+  const y = CENTER_Y;
+  activeToken = { x, y, vx: 0, vy: 0, owner: currentPlayer, outOfBounds: false, moving: false };
+  tokens.push(activeToken);
+
+  if (currentPlayer === 2) {
+    updateStatus();
+    setTimeout(computerTakeShot, 650 + Math.random() * 500);
+  }
+}
+
+function switchPlayerOrEnd() {
+  const p1Done = shotsTaken[1] >= shotsAllowed[1];
+  const p2Done = shotsTaken[2] >= shotsAllowed[2];
+  if (p1Done && p2Done) {
+    endGame();
+    return;
+  }
+  let next = currentPlayer === 1 ? 2 : 1;
+  if (shotsTaken[next] >= shotsAllowed[next]) next = currentPlayer;
+  currentPlayer = next;
+  updateStatus();
+  spawnTokenForCurrentPlayer();
+}
+
+function updateStatus() {
+  if (gameOver) return;
+  if (currentPlayer === 1) {
+    statusEl.textContent = `Your turn — drag back and release to shoot (${shotsAllowed[1] - shotsTaken[1]} left)`;
+  } else {
+    statusEl.textContent = `Computer is thinking...`;
+  }
+}
+
+function computeScores() {
+  let s1 = 0, s2 = 0;
+  for (const t of tokens) {
+    if (t.outOfBounds) continue;
+    if (t.owner === 1 && t.x > CENTER_X) s1++;
+    if (t.owner === 2 && t.x < CENTER_X) s2++;
+  }
+  return { s1, s2 };
+}
+
+function updateHUD() {
+  const { s1, s2 } = computeScores();
+  p1ScoreEl.textContent = s1;
+  p2ScoreEl.textContent = s2;
+  p1LeftEl.textContent = `${Math.max(0, shotsAllowed[1] - shotsTaken[1])} tokens left`;
+  p2LeftEl.textContent = `${Math.max(0, shotsAllowed[2] - shotsTaken[2])} tokens left`;
+}
+
+function endGame() {
+  gameOver = true;
+  const { s1, s2 } = computeScores();
+  let title;
+  if (s1 > s2) title = `You win! ${s1} - ${s2}`;
+  else if (s2 > s1) title = `Computer wins! ${s2} - ${s1}`;
+  else title = `It's a tie! ${s1} - ${s2}`;
+  overlayTitle.textContent = title;
+  overlay.classList.add('show');
+  statusEl.textContent = title;
+}
+
+function resetGame() {
+  tokens = [];
+  currentPlayer = 1;
+  shotsTaken = { 1: 0, 2: 0 };
+  shotsAllowed = { 1: MAX_SHOTS, 2: MAX_SHOTS };
+  activeToken = null;
+  dragging = false;
+  gameOver = false;
+  awaitingSettle = false;
+  pendingMessage = null;
+  overlay.classList.remove('show');
+  updateHUD();
+  updateStatus();
+  spawnTokenForCurrentPlayer();
+}
+
+function fireToken(token, vx, vy) {
+  token.vx = vx;
+  token.vy = vy;
+  shotsTaken[token.owner]++;
+  activeToken = null;
+  dragCurrent = null;
+  awaitingSettle = true;
+  updateHUD();
+  statusEl.textContent = token.owner === 1 ? 'Shot in motion...' : 'Computer shoots...';
+}
+
+// distance a token travels (approx) for a given launch speed, given exponential friction decay
+function speedForDistance(dist) {
+  const speed = dist * (1 - FRICTION);
+  return Math.min(Math.max(speed, 2), MAX_SPEED);
+}
+
+function computerTakeShot() {
+  if (gameOver || !activeToken || activeToken.owner !== 2) return;
+
+  // prefer knocking out an opposing token sitting in the computer's home (right) half
+  const threats = tokens.filter(t => !t.outOfBounds && t.owner === 1 && t.x > CENTER_X && t !== activeToken);
+  let targetX, targetY, power;
+
+  if (threats.length > 0) {
+    const target = threats[Math.floor(Math.random() * threats.length)];
+    targetX = target.x;
+    targetY = target.y;
+    power = 1.15; // extra punch to drive it out
+  } else {
+    // aim to land in the scoring zone (left half), with some randomness
+    targetX = BODY_LEFT_X + 30 + Math.random() * (CENTER_X - BODY_LEFT_X - 60);
+    targetY = CENTER_Y + (Math.random() - 0.5) * (H - RAIL * 4);
+    power = 0.95 + Math.random() * 0.2;
+  }
+
+  const dx = targetX - activeToken.x;
+  const dy = targetY - activeToken.y;
+  const dist = Math.hypot(dx, dy);
+  const ang = Math.atan2(dy, dx);
+  const speed = speedForDistance(dist) * power * (0.9 + Math.random() * 0.2);
+
+  fireToken(activeToken, Math.cos(ang) * speed, Math.sin(ang) * speed);
+}
+
+// ---- Physics ----
+function stepPhysics() {
+  let anyMoving = false;
+  for (const t of tokens) {
+    if (t.outOfBounds) continue;
+    if (Math.abs(t.vx) > STOP_SPEED || Math.abs(t.vy) > STOP_SPEED) {
+      t.x += t.vx;
+      t.y += t.vy;
+      t.vx *= FRICTION;
+      t.vy *= FRICTION;
+      anyMoving = true;
+      t.moving = true;
+    } else {
+      t.vx = 0; t.vy = 0;
+      t.moving = false;
+    }
+
+    if (t.x >= BODY_LEFT_X && t.x <= BODY_RIGHT_X) {
+      // straight section: bounce off top/bottom rails
+      if (t.y - TOKEN_R < RAIL) {
+        t.y = RAIL + TOKEN_R;
+        t.vy = Math.abs(t.vy) * 0.6;
+      } else if (t.y + TOKEN_R > H - RAIL) {
+        t.y = H - RAIL - TOKEN_R;
+        t.vy = -Math.abs(t.vy) * 0.6;
+      }
+    } else {
+      // curved cap section: open boundary, falls out if it crosses the arc
+      const isRightCap = t.x > BODY_RIGHT_X;
+      const capCenterX = isRightCap ? BODY_RIGHT_X : BODY_LEFT_X;
+      const dx = t.x - capCenterX, dy = t.y - CENTER_Y;
+      const dist = Math.hypot(dx, dy);
+      if (dist > CAP_R) {
+        t.outOfBounds = true;
+        t.moving = false;
+
+        // overshooting off the OPPONENT's end (not your own) gifts them a bonus token
+        const opponentsEnd = (t.owner === 1 && isRightCap) || (t.owner === 2 && !isRightCap);
+        if (opponentsEnd) {
+          const beneficiary = t.owner === 1 ? 2 : 1;
+          shotsAllowed[beneficiary]++;
+          pendingMessage = beneficiary === 1
+            ? 'Overshoot! You get a bonus token.'
+            : 'Overshoot! Computer gets a bonus token.';
+        }
+      }
+    }
+  }
+
+  // collisions
+  for (let i = 0; i < tokens.length; i++) {
+    for (let j = i + 1; j < tokens.length; j++) {
+      const a = tokens[i], b = tokens[j];
+      if (a.outOfBounds || b.outOfBounds) continue;
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const dist = Math.hypot(dx, dy);
+      const minDist = TOKEN_R * 2;
+      if (dist > 0 && dist < minDist) {
+        anyMoving = true;
+        const nx = dx / dist, ny = dy / dist;
+        const overlap = (minDist - dist) / 2;
+        a.x -= nx * overlap; a.y -= ny * overlap;
+        b.x += nx * overlap; b.y += ny * overlap;
+
+        const rvx = b.vx - a.vx, rvy = b.vy - a.vy;
+        const velAlongNormal = rvx * nx + rvy * ny;
+        if (velAlongNormal < 0) {
+          const restitution = 0.9;
+          const impulse = -(1 + restitution) * velAlongNormal / 2;
+          a.vx -= impulse * nx; a.vy -= impulse * ny;
+          b.vx += impulse * nx; b.vy += impulse * ny;
+        }
+      }
+    }
+  }
+
+  return anyMoving;
+}
+
+// ---- Rendering ----
+function draw() {
+  ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+
+  const boundary = boundaryScreenPoints();
+  const leftCapScreen = toScreen(BODY_LEFT_X, CENTER_Y);
+  const rightCapScreen = toScreen(BODY_RIGHT_X, CENTER_Y);
+
+  // capsule board fill: sunrise (left) to sunset (right) gradient, following the arc
+  pathFromPoints(boundary);
+  const grad = ctx.createLinearGradient(leftCapScreen.x, 0, rightCapScreen.x, 0);
+  grad.addColorStop(0, '#ffe3b8');
+  grad.addColorStop(0.28, '#ffc9d6');
+  grad.addColorStop(0.5, '#f2b8e0');
+  grad.addColorStop(0.72, '#c9c3f0');
+  grad.addColorStop(1, '#a9d4f5');
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  ctx.save();
+  pathFromPoints(boundary);
+  ctx.clip();
+
+  // soft "sun" glow near each cap — warm sunrise on the left, cool sunset on the right
+  const sunL = ctx.createRadialGradient(leftCapScreen.x - CAP_R * 0.3, leftCapScreen.y, 4, leftCapScreen.x - CAP_R * 0.3, leftCapScreen.y, CAP_R * 1.4);
+  sunL.addColorStop(0, 'rgba(255,255,255,0.55)');
+  sunL.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = sunL;
+  ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+
+  const sunR = ctx.createRadialGradient(rightCapScreen.x + CAP_R * 0.3, rightCapScreen.y, 4, rightCapScreen.x + CAP_R * 0.3, rightCapScreen.y, CAP_R * 1.4);
+  sunR.addColorStop(0, 'rgba(255,255,255,0.4)');
+  sunR.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = sunR;
+  ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+
+  ctx.restore();
+
+  // capsule outline
+  pathFromPoints(boundary);
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+  ctx.stroke();
+
+  // center line (follows the arc's symmetry axis, so it renders straight)
+  ctx.save();
+  pathFromPoints(boundary);
+  ctx.clip();
+  const centerTop = toScreen(CENTER_X, RAIL);
+  const centerBottom = toScreen(CENTER_X, H - RAIL);
+  ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+  ctx.setLineDash([10, 8]);
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(centerTop.x, centerTop.y);
+  ctx.lineTo(centerBottom.x, centerBottom.y);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.restore();
+
+  // labels, rotated to follow the local tangent of the arc
+  ctx.fillStyle = 'rgba(50,40,60,0.55)';
+  ctx.font = '600 12px sans-serif';
+  ctx.textAlign = 'center';
+  drawZoneLabel('COMPUTER ZONE', CENTER_X - CAP_R * 0.55, CENTER_Y);
+  drawZoneLabel('YOUR ZONE', CENTER_X + CAP_R * 0.55, CENTER_Y);
+
+  // tokens — flat mapping so shots travel in true straight lines over the curved board
+  for (const t of tokens) {
+    if (t.outOfBounds) continue;
+    const p = flatToScreen(t.x, t.y);
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, TOKEN_R, 0, Math.PI * 2);
+    const color = t.owner === 1 ? '#ff9ecb' : '#8ecdf0';
+    const light = t.owner === 1 ? '#fff0f6' : '#eaf8ff';
+    const rg = ctx.createRadialGradient(p.x - 5, p.y - 5, 3, p.x, p.y, TOKEN_R);
+    rg.addColorStop(0, light);
+    rg.addColorStop(1, color);
+    ctx.fillStyle = rg;
+    ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = 'rgba(60,40,60,0.25)';
+    ctx.stroke();
+  }
+
+  // aim line (human player only) — straight, with an arrowhead showing shot direction
+  if (dragging && dragStart && dragCurrent && activeToken) {
+    const dx = dragStart.x - dragCurrent.x;
+    const dy = dragStart.y - dragCurrent.y;
+    const dist = Math.min(Math.hypot(dx, dy), MAX_PULL);
+    const ang = Math.atan2(dy, dx);
+    const aimX = activeToken.x + Math.cos(ang) * dist * 1.4;
+    const aimY = activeToken.y + Math.sin(ang) * dist * 1.4;
+
+    const origin = flatToScreen(activeToken.x, activeToken.y);
+    const tip = flatToScreen(aimX, aimY);
+    const pct = dist / MAX_PULL;
+    const lineColor = `rgba(255, ${140 - pct * 40}, ${180 - pct * 60}, 0.9)`;
+
+    ctx.strokeStyle = lineColor;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(origin.x, origin.y);
+    ctx.lineTo(tip.x, tip.y);
+    ctx.stroke();
+
+    // arrowhead at the tip, pointing in the shot direction
+    const screenAng = Math.atan2(tip.y - origin.y, tip.x - origin.x);
+    const headLen = 14;
+    const headAngle = Math.PI / 7;
+    ctx.fillStyle = lineColor;
+    ctx.beginPath();
+    ctx.moveTo(tip.x, tip.y);
+    ctx.lineTo(tip.x - headLen * Math.cos(screenAng - headAngle), tip.y - headLen * Math.sin(screenAng - headAngle));
+    ctx.lineTo(tip.x - headLen * Math.cos(screenAng + headAngle), tip.y - headLen * Math.sin(screenAng + headAngle));
+    ctx.closePath();
+    ctx.fill();
+  }
+}
+
+function drawZoneLabel(text, logicalX, logicalY) {
+  const p = toScreen(logicalX, logicalY);
+  const theta = ((logicalX - CENTER_X) / ARC_HALF_W) * ARC_THETA_MAX;
+  ctx.save();
+  ctx.translate(p.x, p.y);
+  ctx.rotate(theta - Math.PI / 2);
+  ctx.fillText(text, 0, 0);
+  ctx.restore();
+}
+
+// ---- Input (human = player 1 only) ----
+function getPos(evt) {
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = CANVAS_W / rect.width;
+  const scaleY = CANVAS_H / rect.height;
+  const cx = (evt.touches ? evt.touches[0].clientX : evt.clientX);
+  const cy = (evt.touches ? evt.touches[0].clientY : evt.clientY);
+  const screenX = (cx - rect.left) * scaleX;
+  const screenY = (cy - rect.top) * scaleY;
+  return flatToLogical(screenX, screenY);
+}
+
+function onDown(evt) {
+  if (gameOver || !activeToken || activeToken.owner !== 1) return;
+  const pos = getPos(evt);
+  const dx = pos.x - activeToken.x, dy = pos.y - activeToken.y;
+  if (Math.hypot(dx, dy) < TOKEN_R * 2.5) {
+    dragging = true;
+    dragStart = { x: activeToken.x, y: activeToken.y };
+    dragCurrent = pos;
+    evt.preventDefault();
+  }
+}
+
+function onMove(evt) {
+  if (!dragging) return;
+  dragCurrent = getPos(evt);
+  evt.preventDefault();
+}
+
+function onUp(evt) {
+  if (!dragging || !activeToken) return;
+  dragging = false;
+  const dx = dragStart.x - dragCurrent.x;
+  const dy = dragStart.y - dragCurrent.y;
+  let dist = Math.hypot(dx, dy);
+  if (dist < 8) { dragCurrent = null; return; }
+  dist = Math.min(dist, MAX_PULL);
+  const ang = Math.atan2(dy, dx);
+  const speed = Math.min((dist / MAX_PULL) * MAX_SPEED, MAX_SPEED);
+  fireToken(activeToken, Math.cos(ang) * speed, Math.sin(ang) * speed);
+}
+
+canvas.addEventListener('mousedown', onDown);
+window.addEventListener('mousemove', onMove);
+window.addEventListener('mouseup', onUp);
+canvas.addEventListener('touchstart', onDown, { passive: false });
+canvas.addEventListener('touchmove', onMove, { passive: false });
+canvas.addEventListener('touchend', onUp);
+
+// ---- Main loop ----
+const STEP_MS = 1000 / 60;
+const MAX_SUBSTEPS = 600;
+let lastTime = null;
+let accumulator = 0;
+
+function loop() {
+  const now = performance.now();
+  if (lastTime === null) lastTime = now;
+  let frameMs = now - lastTime;
+  lastTime = now;
+  if (frameMs > 10000) frameMs = 10000;
+  accumulator += frameMs;
+
+  let moving = false;
+  let substeps = 0;
+  while (accumulator >= STEP_MS && substeps < MAX_SUBSTEPS) {
+    moving = stepPhysics() || moving;
+    accumulator -= STEP_MS;
+    substeps++;
+  }
+  if (substeps === MAX_SUBSTEPS) accumulator = 0;
+
+  draw();
+  updateHUD();
+
+  if (awaitingSettle && !moving) {
+    awaitingSettle = false;
+    updateHUD();
+    if (pendingMessage) {
+      statusEl.textContent = pendingMessage;
+      pendingMessage = null;
+      setTimeout(switchPlayerOrEnd, 1400);
+    } else {
+      switchPlayerOrEnd();
+    }
+  }
+}
+
+document.getElementById('restart').addEventListener('click', resetGame);
+document.getElementById('overlay-restart').addEventListener('click', resetGame);
+
+resetGame();
+setInterval(loop, 16);
+</script>
+</body>
+</html>
