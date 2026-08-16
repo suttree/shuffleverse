@@ -359,7 +359,9 @@ function spawnTokenForCurrentPlayer() {
 
   if (currentPlayer === 2) {
     updateStatus();
-    setTimeout(computerTakeShot, 650 + Math.random() * 500);
+    // the main "wait for a stop, then pause" delay already happened before
+    // this turn began (see TURN_PAUSE_MS) — this is just a brief aiming beat
+    setTimeout(computerTakeShot, 400 + Math.random() * 200);
   }
 }
 
@@ -707,7 +709,7 @@ canvas.addEventListener('touchend', onUp);
 // ---- Main loop ----
 const STEP_MS = 1000 / 60;
 const MAX_SUBSTEPS = 600;
-const TURN_PAUSE_MS = 550; // pause after a token fully stops before the next turn begins
+const TURN_PAUSE_MS = 2000; // pause after every token fully stops before the next turn begins
 let lastTime = null;
 let accumulator = 0;
 
@@ -737,11 +739,11 @@ function loop() {
     if (pendingMessage) {
       statusEl.textContent = pendingMessage;
       pendingMessage = null;
-      setTimeout(switchPlayerOrEnd, 1400);
-    } else {
-      // brief pause after the token fully stops, so the next turn doesn't feel instant
-      setTimeout(switchPlayerOrEnd, TURN_PAUSE_MS);
     }
+    // wait for every token to be fully at rest (already true here), then pause
+    // before the next turn — this is what gives the computer time to "see"
+    // the board settle instead of firing while something is still sliding
+    setTimeout(switchPlayerOrEnd, TURN_PAUSE_MS);
   }
 }
 
