@@ -251,29 +251,47 @@ function flatToLogical(sx, sy) {
   return { x: sx - ARC_CX + CENTER_X, y: sy - ARC_APEX_Y + CENTER_Y };
 }
 
-// Build a screen-space polyline tracing the capsule outline by sampling the
+// Build screen-space polylines tracing the capsule outline by sampling the
 // logical boundary (straight rails + semicircular caps) and warping each point.
-function boundaryScreenPoints() {
-  const pts = [];
-  const CAP_STEPS = 28;
-  const EDGE_STEPS = 20;
+// Returned as separate segments so solid rails (tokens rebound) can be styled
+// differently from the open end caps (tokens fall off, opponent gets a bonus).
+const CAP_STEPS = 28;
+const EDGE_STEPS = 20;
+
+function boundarySegments() {
+  const topRail = [];
   for (let i = 0; i <= EDGE_STEPS; i++) {
     const x = BODY_LEFT_X + ((BODY_RIGHT_X - BODY_LEFT_X) * i) / EDGE_STEPS;
-    pts.push(toScreen(x, RAIL));
+    topRail.push(toScreen(x, RAIL));
   }
+  const rightCap = [];
   for (let i = 0; i <= CAP_STEPS; i++) {
     const a = -Math.PI / 2 + (Math.PI * i) / CAP_STEPS;
-    pts.push(toScreen(BODY_RIGHT_X + CAP_R * Math.cos(a), CENTER_Y + CAP_R * Math.sin(a)));
+    rightCap.push(toScreen(BODY_RIGHT_X + CAP_R * Math.cos(a), CENTER_Y + CAP_R * Math.sin(a)));
   }
+  const bottomRail = [];
   for (let i = 0; i <= EDGE_STEPS; i++) {
     const x = BODY_RIGHT_X - ((BODY_RIGHT_X - BODY_LEFT_X) * i) / EDGE_STEPS;
-    pts.push(toScreen(x, H - RAIL));
+    bottomRail.push(toScreen(x, H - RAIL));
   }
+  const leftCap = [];
   for (let i = 0; i <= CAP_STEPS; i++) {
     const a = Math.PI / 2 + (Math.PI * i) / CAP_STEPS;
-    pts.push(toScreen(BODY_LEFT_X + CAP_R * Math.cos(a), CENTER_Y + CAP_R * Math.sin(a)));
+    leftCap.push(toScreen(BODY_LEFT_X + CAP_R * Math.cos(a), CENTER_Y + CAP_R * Math.sin(a)));
   }
-  return pts;
+  return { topRail, rightCap, bottomRail, leftCap };
+}
+
+function boundaryScreenPoints(segments) {
+  const s = segments || boundarySegments();
+  return [...s.topRail, ...s.rightCap, ...s.bottomRail, ...s.leftCap];
+}
+
+function strokePolyline(pts) {
+  ctx.beginPath();
+  ctx.moveTo(pts[0].x, pts[0].y);
+  for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+  ctx.stroke();
 }
 
 function pathFromPoints(pts) {
@@ -518,7 +536,8 @@ function stepPhysics() {
 function draw() {
   ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
 
-  const boundary = boundaryScreenPoints();
+  const segs = boundarySegments();
+  const boundary = boundaryScreenPoints(segs);
   const leftCapScreen = toScreen(BODY_LEFT_X, CENTER_Y);
   const rightCapScreen = toScreen(BODY_RIGHT_X, CENTER_Y);
 
@@ -552,11 +571,28 @@ function draw() {
 
   ctx.restore();
 
-  // capsule outline
-  pathFromPoints(boundary);
+  // solid rails (top/bottom): tokens rebound here — drawn as a raised wall
+  ctx.save();
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = 'rgba(60,40,70,0.28)';
+  ctx.lineWidth = 7;
+  strokePolyline(segs.topRail);
+  strokePolyline(segs.bottomRail);
+  ctx.strokeStyle = 'rgba(255,255,255,0.85)';
   ctx.lineWidth = 3;
-  ctx.strokeStyle = 'rgba(255,255,255,0.55)';
-  ctx.stroke();
+  strokePolyline(segs.topRail);
+  strokePolyline(segs.bottomRail);
+  ctx.restore();
+
+  // open end caps: tokens fall off here (opponent gets a bonus token) —
+  // drawn as a fading dashed line to read as an edge, not a wall
+  ctx.save();
+  ctx.setLineDash([6, 10]);
+  ctx.lineWidth = 2.5;
+  ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+  strokePolyline(segs.rightCap);
+  strokePolyline(segs.leftCap);
+  ctx.restore();
 
   // center line (follows the arc's symmetry axis, so it renders straight)
   ctx.save();
