@@ -8,10 +8,10 @@
   :root {
     --bg-1: #1b1a2b;
     --bg-2: #221f36;
-    --p1-color: #ff9ecb;
-    --p1-light: #ffd3e8;
-    --p2-color: #8ecdf0;
-    --p2-light: #c9ecff;
+    --p1-color: #ff4d6d;
+    --p1-light: #ffb3c1;
+    --p2-color: #2ea9f5;
+    --p2-light: #a8dcff;
     --sunrise: #ffd6a5;
     --sunset: #cdb4db;
     --text: #f4f1ff;
@@ -215,7 +215,7 @@ const RAIL = 16;                 // margin between logical edge and the capsule 
 const CAP_R = (H - RAIL * 2) / 2; // radius of the curved end caps
 const BODY_LEFT_X = RAIL + CAP_R; // where the left curve meets the straight body
 const BODY_RIGHT_X = W - RAIL - CAP_R;
-const TOKEN_R = 18;
+const TOKEN_R = 21;
 const FRICTION = 0.985;
 const STOP_SPEED = 0.06;
 const MAX_PULL = 130;
@@ -541,14 +541,14 @@ function draw() {
   const leftCapScreen = toScreen(BODY_LEFT_X, CENTER_Y);
   const rightCapScreen = toScreen(BODY_RIGHT_X, CENTER_Y);
 
-  // capsule board fill: sunrise (left) to sunset (right) gradient, following the arc
+  // capsule board fill: blue (computer, left) to red (you, right), through a soft neutral middle
   pathFromPoints(boundary);
   const grad = ctx.createLinearGradient(leftCapScreen.x, 0, rightCapScreen.x, 0);
-  grad.addColorStop(0, '#ffe3b8');
-  grad.addColorStop(0.28, '#ffc9d6');
-  grad.addColorStop(0.5, '#f2b8e0');
-  grad.addColorStop(0.72, '#c9c3f0');
-  grad.addColorStop(1, '#a9d4f5');
+  grad.addColorStop(0, '#bdeaff');
+  grad.addColorStop(0.3, '#6cc6f5');
+  grad.addColorStop(0.5, '#f1edf9');
+  grad.addColorStop(0.7, '#ffb0c4');
+  grad.addColorStop(1, '#ff8098');
   ctx.fillStyle = grad;
   ctx.fill();
 
@@ -556,16 +556,18 @@ function draw() {
   pathFromPoints(boundary);
   ctx.clip();
 
-  // soft "sun" glow near each cap — warm sunrise on the left, cool sunset on the right
+  // soft glow near each cap — cool blue on the computer's end, warm red on yours
   const sunL = ctx.createRadialGradient(leftCapScreen.x - CAP_R * 0.3, leftCapScreen.y, 4, leftCapScreen.x - CAP_R * 0.3, leftCapScreen.y, CAP_R * 1.4);
-  sunL.addColorStop(0, 'rgba(255,255,255,0.55)');
-  sunL.addColorStop(1, 'rgba(255,255,255,0)');
+  sunL.addColorStop(0, 'rgba(255,255,255,0.6)');
+  sunL.addColorStop(0.5, 'rgba(180,230,255,0.25)');
+  sunL.addColorStop(1, 'rgba(180,230,255,0)');
   ctx.fillStyle = sunL;
   ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
 
   const sunR = ctx.createRadialGradient(rightCapScreen.x + CAP_R * 0.3, rightCapScreen.y, 4, rightCapScreen.x + CAP_R * 0.3, rightCapScreen.y, CAP_R * 1.4);
-  sunR.addColorStop(0, 'rgba(255,255,255,0.4)');
-  sunR.addColorStop(1, 'rgba(255,255,255,0)');
+  sunR.addColorStop(0, 'rgba(255,255,255,0.5)');
+  sunR.addColorStop(0.5, 'rgba(255,150,170,0.25)');
+  sunR.addColorStop(1, 'rgba(255,150,170,0)');
   ctx.fillStyle = sunR;
   ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
 
@@ -621,17 +623,41 @@ function draw() {
   for (const t of tokens) {
     if (t.outOfBounds) continue;
     const p = flatToScreen(t.x, t.y);
+    const color = t.owner === 1 ? '#ff3355' : '#0d99ff';
+    const light = t.owner === 1 ? '#ffe1e6' : '#dff3ff';
+    const rim = t.owner === 1 ? '#ffffff' : '#ffffff';
+    const glow = t.owner === 1 ? 'rgba(255,51,85,0.75)' : 'rgba(13,153,255,0.75)';
+
+    // soft glow beneath the token so it pops off the board
+    ctx.save();
+    ctx.shadowColor = glow;
+    ctx.shadowBlur = 22;
     ctx.beginPath();
     ctx.arc(p.x, p.y, TOKEN_R, 0, Math.PI * 2);
-    const color = t.owner === 1 ? '#ff9ecb' : '#8ecdf0';
-    const light = t.owner === 1 ? '#fff0f6' : '#eaf8ff';
-    const rg = ctx.createRadialGradient(p.x - 5, p.y - 5, 3, p.x, p.y, TOKEN_R);
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.restore();
+
+    // main body with a bright highlight for a glossy, high-contrast look
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, TOKEN_R, 0, Math.PI * 2);
+    const rg = ctx.createRadialGradient(p.x - 6, p.y - 7, 2, p.x, p.y, TOKEN_R);
     rg.addColorStop(0, light);
+    rg.addColorStop(0.45, color);
     rg.addColorStop(1, color);
     ctx.fillStyle = rg;
     ctx.fill();
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = 'rgba(60,40,60,0.25)';
+
+    // crisp bright rim for definition against the board
+    ctx.lineWidth = 2.5;
+    ctx.strokeStyle = rim;
+    ctx.globalAlpha = 0.9;
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = 'rgba(20,10,20,0.35)';
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, TOKEN_R - 1.5, 0, Math.PI * 2);
     ctx.stroke();
   }
 
