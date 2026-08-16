@@ -223,7 +223,7 @@ const MAX_SPEED = 22;
 
 // ---- Arc transform (logical space -> curved screen space) ----
 const CANVAS_W = canvas.width, CANVAS_H = canvas.height;
-const ARC_SAGITTA = 180; // how far the centerline bulges upward across the full width
+const ARC_SAGITTA = 260; // how far the centerline bulges upward across the full width
 const ARC_HALF_W = W / 2;
 const ARC_R = (ARC_HALF_W * ARC_HALF_W + ARC_SAGITTA * ARC_SAGITTA) / (2 * ARC_SAGITTA);
 const ARC_THETA_MAX = Math.asin(ARC_HALF_W / ARC_R);
@@ -299,6 +299,22 @@ function pathFromPoints(pts) {
   ctx.moveTo(pts[0].x, pts[0].y);
   for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
   ctx.closePath();
+}
+
+// The board outline is constant (only depends on fixed geometry), so compute
+// it once and reuse it both for drawing and for the out-of-bounds check below.
+const BOUNDARY_POLY = boundaryScreenPoints();
+
+function pointInPolygon(x, y, poly) {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const xi = poly[i].x, yi = poly[i].y;
+    const xj = poly[j].x, yj = poly[j].y;
+    const intersect = ((yi > y) !== (yj > y)) &&
+      (x < ((xj - xi) * (y - yi)) / (yj - yi) + xi);
+    if (intersect) inside = !inside;
+  }
+  return inside;
 }
 
 let tokens = [];
@@ -428,27 +444,26 @@ function speedForDistance(dist) {
 function computerTakeShot() {
   if (gameOver || !activeToken || activeToken.owner !== 2) return;
 
-  // prefer knocking out an opposing token sitting in the computer's home (right) half —
-  // pick the nearest one for a shorter, more reliable shot
+  // Defense first: any human token currently scoring (sitting in the right half)
+  // is a threat. Target the one deepest in their zone (largest x) — it's both
+  // the most valuable point to deny (hardest for them to have landed) and the
+  // shortest, most reliable shot since it's closest to the computer's spawn.
   const threats = tokens.filter(t => !t.outOfBounds && t.owner === 1 && t.x > CENTER_X && t !== activeToken);
-  let targetX, targetY, overshoot;
+  let targetX, targetY, isThreatShot;
 
   if (threats.length > 0) {
-    let nearest = threats[0], bestDist = Infinity;
-    for (const t of threats) {
-      const d = Math.hypot(t.x - activeToken.x, t.y - activeToken.y);
-      if (d < bestDist) { bestDist = d; nearest = t; }
-    }
-    targetX = nearest.x;
-    targetY = nearest.y;
-    overshoot = 1.08; // push decisively through the target instead of just tapping it
+    let best = threats[0];
+    for (const t of threats) if (t.x > best.x) best = t;
+    targetX = best.x;
+    targetY = best.y;
+    isThreatShot = true;
   } else {
-    // aim deep into the scoring zone (safer from being knocked back across the
-    // center line later) while staying well clear of the open edge
+    // no threats to clear — go on offense and land deep in the scoring zone
+    // (safer from being knocked back later) while staying clear of the open edge
     const zoneWidth = CENTER_X - BODY_LEFT_X - 60;
     targetX = BODY_LEFT_X + 30 + Math.pow(Math.random(), 1.6) * zoneWidth;
     targetY = CENTER_Y + (Math.random() - 0.5) * (H - RAIL * 4) * 0.7;
-    overshoot = 1.0;
+    isThreatShot = false;
   }
 
   const dx = targetX - activeToken.x;
@@ -456,7 +471,15 @@ function computerTakeShot() {
   const dist = Math.hypot(dx, dy);
   const ang = Math.atan2(dy, dx);
   const noise = 0.97 + Math.random() * 0.06; // small human-like imprecision, not wild randomness
-  const speed = speedForDistance(dist) * overshoot * noise;
+
+  // Friction decays speed roughly LINEARLY with distance traveled (not with a
+  // multiplier), so to guarantee a decisive hit on a threat we add a flat extra
+  // "punch" of speed on top of the stopping speed — enough left at the moment
+  // of impact to drive the target off the board, not just nudge it.
+  const PUNCH = 14;
+  const speed = isThreatShot
+    ? Math.min(speedForDistance(dist) * noise + PUNCH, MAX_SPEED)
+    : speedForDistance(dist) * noise;
 
   fireToken(activeToken, Math.cos(ang) * speed, Math.sin(ang) * speed);
 }
@@ -488,12 +511,14 @@ function stepPhysics() {
         t.vy = -Math.abs(t.vy) * 0.6;
       }
     } else {
-      // curved cap section: open boundary, falls out if it crosses the arc
+      // curved cap section: open boundary, falls out if it crosses the arc.
+      // Tokens render at a flat (unwarped) position while the board outline
+      // is curved, so the out-of-bounds test compares that same rendered
+      // point against the actual drawn outline — otherwise a token can
+      // visually still look on the board while physics already dropped it.
       const isRightCap = t.x > BODY_RIGHT_X;
-      const capCenterX = isRightCap ? BODY_RIGHT_X : BODY_LEFT_X;
-      const dx = t.x - capCenterX, dy = t.y - CENTER_Y;
-      const dist = Math.hypot(dx, dy);
-      if (dist > CAP_R) {
+      const screenPos = flatToScreen(t.x, t.y);
+      if (!pointInPolygon(screenPos.x, screenPos.y, BOUNDARY_POLY)) {
         t.outOfBounds = true;
         t.moving = false;
 
@@ -601,19 +626,8 @@ function draw() {
     if (t.outOfBounds) continue;
     const p = flatToScreen(t.x, t.y);
     const color = t.owner === 1 ? '#ff3355' : '#0d99ff';
-    const glow = t.owner === 1 ? 'rgba(255,51,85,0.75)' : 'rgba(13,153,255,0.75)';
 
-    // soft glow beneath the token so it pops off the board
-    ctx.save();
-    ctx.shadowColor = glow;
-    ctx.shadowBlur = 22;
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, TOKEN_R, 0, Math.PI * 2);
-    ctx.fillStyle = color;
-    ctx.fill();
-    ctx.restore();
-
-    // flat saturated body, no gloss
+    // flat saturated body, no gloss or shadow
     ctx.beginPath();
     ctx.arc(p.x, p.y, TOKEN_R, 0, Math.PI * 2);
     ctx.fillStyle = color;
