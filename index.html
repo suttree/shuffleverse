@@ -113,8 +113,12 @@
     touch-action: none;
     cursor: grab;
   }
-  #restart {
+  #controls {
     margin-top: 4px;
+    display: flex;
+    gap: 10px;
+  }
+  #restart, #music-toggle {
     background: var(--panel);
     color: var(--text);
     border: 1px solid rgba(255,255,255,0.15);
@@ -124,7 +128,8 @@
     letter-spacing: 0.5px;
     cursor: pointer;
   }
-  #restart:hover { background: rgba(255,255,255,0.12); }
+  #restart:hover, #music-toggle:hover { background: rgba(255,255,255,0.12); }
+  #music-toggle.playing { border-color: rgba(142,205,240,0.6); }
   #overlay {
     position: absolute;
     inset: 0;
@@ -175,7 +180,10 @@
         <button id="overlay-restart">Play Again</button>
       </div>
     </div>
-    <button id="restart">Restart Game</button>
+    <div id="controls">
+      <button id="restart">Restart Game</button>
+      <button id="music-toggle">🔈 Music</button>
+    </div>
   </div>
 
 <script>
@@ -501,37 +509,22 @@ function stepPhysics() {
       t.moving = false;
     }
 
-    if (t.x >= BODY_LEFT_X && t.x <= BODY_RIGHT_X) {
-      // straight section: bounce off top/bottom rails
-      if (t.y - TOKEN_R < RAIL) {
-        t.y = RAIL + TOKEN_R;
-        t.vy = Math.abs(t.vy) * 0.6;
-      } else if (t.y + TOKEN_R > H - RAIL) {
-        t.y = H - RAIL - TOKEN_R;
-        t.vy = -Math.abs(t.vy) * 0.6;
-      }
-    } else {
-      // curved cap section: open boundary, falls out if it crosses the arc.
-      // Tokens render at a flat (unwarped) position while the board outline
-      // is curved, so the out-of-bounds test compares that same rendered
-      // point against the actual drawn outline — otherwise a token can
-      // visually still look on the board while physics already dropped it.
-      const isRightCap = t.x > BODY_RIGHT_X;
-      const screenPos = flatToScreen(t.x, t.y);
-      if (!pointInPolygon(screenPos.x, screenPos.y, BOUNDARY_POLY)) {
-        t.outOfBounds = true;
-        t.moving = false;
+    // No walls anywhere — the whole perimeter is open. A token that crosses
+    // the boundary (top, bottom, or either end) falls off and is awarded to
+    // whichever player owns that side of the board (blue/left = computer,
+    // red/right = you). Tokens render at a flat position while the board
+    // outline is curved, so the check compares that same rendered point
+    // against the actual drawn outline, matching what the player sees.
+    const screenPos = flatToScreen(t.x, t.y);
+    if (!pointInPolygon(screenPos.x, screenPos.y, BOUNDARY_POLY)) {
+      t.outOfBounds = true;
+      t.moving = false;
 
-        // overshooting off the OPPONENT's end (not your own) gifts them a bonus token
-        const opponentsEnd = (t.owner === 1 && isRightCap) || (t.owner === 2 && !isRightCap);
-        if (opponentsEnd) {
-          const beneficiary = t.owner === 1 ? 2 : 1;
-          shotsAllowed[beneficiary]++;
-          pendingMessage = beneficiary === 1
-            ? 'Overshoot! You get a bonus token.'
-            : 'Overshoot! Computer gets a bonus token.';
-        }
-      }
+      const beneficiary = t.x > CENTER_X ? 1 : 2;
+      shotsAllowed[beneficiary]++;
+      pendingMessage = beneficiary === 1
+        ? 'Off the board! You get a bonus token.'
+        : 'Off the board! Computer gets a bonus token.';
     }
   }
 
@@ -582,26 +575,15 @@ function draw() {
   ctx.fillRect(ARC_CX, 0, CANVAS_W - ARC_CX, CANVAS_H);
   ctx.restore();
 
-  // solid rails (top/bottom): tokens rebound here — drawn as a raised wall
-  ctx.save();
-  ctx.lineCap = 'round';
-  ctx.strokeStyle = 'rgba(60,40,70,0.28)';
-  ctx.lineWidth = 7;
-  strokePolyline(segs.topRail);
-  strokePolyline(segs.bottomRail);
-  ctx.strokeStyle = 'rgba(255,255,255,0.85)';
-  ctx.lineWidth = 3;
-  strokePolyline(segs.topRail);
-  strokePolyline(segs.bottomRail);
-  ctx.restore();
-
-  // open end caps: tokens fall off here (opponent gets a bonus token) —
-  // drawn as a fading dashed line to read as an edge, not a wall
+  // no walls anywhere — the whole perimeter is open, so it's drawn as a
+  // single fading dashed edge (falls off, doesn't bounce) all the way around
   ctx.save();
   ctx.setLineDash([6, 10]);
   ctx.lineWidth = 2.5;
   ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+  strokePolyline(segs.topRail);
   strokePolyline(segs.rightCap);
+  strokePolyline(segs.bottomRail);
   strokePolyline(segs.leftCap);
   ctx.restore();
 
@@ -768,6 +750,78 @@ document.getElementById('overlay-restart').addEventListener('click', resetGame);
 
 resetGame();
 setInterval(loop, 16);
+
+// ---- Ambient background music (procedurally generated, no audio files) ----
+// Built lazily on first click, since browsers require a user gesture before
+// any audio can play.
+let audioCtx = null;
+let musicMaster = null;
+let musicPlaying = false;
+const musicToggleBtn = document.getElementById('music-toggle');
+
+function initMusic() {
+  if (audioCtx) return;
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+  musicMaster = audioCtx.createGain();
+  musicMaster.gain.value = 0;
+  musicMaster.connect(audioCtx.destination);
+
+  const filter = audioCtx.createBiquadFilter();
+  filter.type = 'lowpass';
+  filter.frequency.value = 1100;
+  filter.connect(musicMaster);
+
+  // gentle stereo-feeling echo for a spacious, ambient feel
+  const delay = audioCtx.createDelay(2);
+  delay.delayTime.value = 0.42;
+  const feedback = audioCtx.createGain();
+  feedback.gain.value = 0.3;
+  const wet = audioCtx.createGain();
+  wet.gain.value = 0.25;
+  filter.connect(delay);
+  delay.connect(feedback);
+  feedback.connect(delay);
+  delay.connect(wet);
+  wet.connect(musicMaster);
+
+  // an open, dreamy sustained chord (C3, G3, C4, E4), each note breathing
+  // independently via its own slow LFO so the pad never feels static
+  const notes = [130.81, 196.0, 261.63, 329.63];
+  notes.forEach((freq, i) => {
+    const osc = audioCtx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.value = freq;
+
+    const noteGain = audioCtx.createGain();
+    noteGain.gain.value = 0.055;
+    osc.connect(noteGain);
+    noteGain.connect(filter);
+    osc.start();
+
+    const lfo = audioCtx.createOscillator();
+    lfo.frequency.value = 0.045 + i * 0.017;
+    const lfoGain = audioCtx.createGain();
+    lfoGain.gain.value = 0.035;
+    lfo.connect(lfoGain);
+    lfoGain.connect(noteGain.gain);
+    lfo.start();
+  });
+}
+
+function toggleMusic() {
+  initMusic();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  musicPlaying = !musicPlaying;
+  const now = audioCtx.currentTime;
+  musicMaster.gain.cancelScheduledValues(now);
+  musicMaster.gain.setValueAtTime(musicMaster.gain.value, now);
+  musicMaster.gain.linearRampToValueAtTime(musicPlaying ? 0.5 : 0, now + 1.2);
+  musicToggleBtn.textContent = musicPlaying ? '🔊 Music' : '🔈 Music';
+  musicToggleBtn.classList.toggle('playing', musicPlaying);
+}
+
+musicToggleBtn.addEventListener('click', toggleMusic);
 </script>
 </body>
 </html>
