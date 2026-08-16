@@ -215,7 +215,7 @@ const RAIL = 16;                 // margin between logical edge and the capsule 
 const CAP_R = (H - RAIL * 2) / 2; // radius of the curved end caps
 const BODY_LEFT_X = RAIL + CAP_R; // where the left curve meets the straight body
 const BODY_RIGHT_X = W - RAIL - CAP_R;
-const TOKEN_R = 19;
+const TOKEN_R = 13;
 const FRICTION = 0.985;
 const STOP_SPEED = 0.06;
 const MAX_PULL = 130;
@@ -428,27 +428,35 @@ function speedForDistance(dist) {
 function computerTakeShot() {
   if (gameOver || !activeToken || activeToken.owner !== 2) return;
 
-  // prefer knocking out an opposing token sitting in the computer's home (right) half
+  // prefer knocking out an opposing token sitting in the computer's home (right) half —
+  // pick the nearest one for a shorter, more reliable shot
   const threats = tokens.filter(t => !t.outOfBounds && t.owner === 1 && t.x > CENTER_X && t !== activeToken);
-  let targetX, targetY, power;
+  let targetX, targetY, overshoot;
 
   if (threats.length > 0) {
-    const target = threats[Math.floor(Math.random() * threats.length)];
-    targetX = target.x;
-    targetY = target.y;
-    power = 1.15; // extra punch to drive it out
+    let nearest = threats[0], bestDist = Infinity;
+    for (const t of threats) {
+      const d = Math.hypot(t.x - activeToken.x, t.y - activeToken.y);
+      if (d < bestDist) { bestDist = d; nearest = t; }
+    }
+    targetX = nearest.x;
+    targetY = nearest.y;
+    overshoot = 1.08; // push decisively through the target instead of just tapping it
   } else {
-    // aim to land in the scoring zone (left half), with some randomness
-    targetX = BODY_LEFT_X + 30 + Math.random() * (CENTER_X - BODY_LEFT_X - 60);
-    targetY = CENTER_Y + (Math.random() - 0.5) * (H - RAIL * 4);
-    power = 0.95 + Math.random() * 0.2;
+    // aim deep into the scoring zone (safer from being knocked back across the
+    // center line later) while staying well clear of the open edge
+    const zoneWidth = CENTER_X - BODY_LEFT_X - 60;
+    targetX = BODY_LEFT_X + 30 + Math.pow(Math.random(), 1.6) * zoneWidth;
+    targetY = CENTER_Y + (Math.random() - 0.5) * (H - RAIL * 4) * 0.7;
+    overshoot = 1.0;
   }
 
   const dx = targetX - activeToken.x;
   const dy = targetY - activeToken.y;
   const dist = Math.hypot(dx, dy);
   const ang = Math.atan2(dy, dx);
-  const speed = speedForDistance(dist) * power * (0.9 + Math.random() * 0.2);
+  const noise = 0.97 + Math.random() * 0.06; // small human-like imprecision, not wild randomness
+  const speed = speedForDistance(dist) * overshoot * noise;
 
   fireToken(activeToken, Math.cos(ang) * speed, Math.sin(ang) * speed);
 }
@@ -703,6 +711,7 @@ canvas.addEventListener('touchend', onUp);
 // ---- Main loop ----
 const STEP_MS = 1000 / 60;
 const MAX_SUBSTEPS = 600;
+const TURN_PAUSE_MS = 550; // pause after a token fully stops before the next turn begins
 let lastTime = null;
 let accumulator = 0;
 
@@ -734,7 +743,8 @@ function loop() {
       pendingMessage = null;
       setTimeout(switchPlayerOrEnd, 1400);
     } else {
-      switchPlayerOrEnd();
+      // brief pause after the token fully stops, so the next turn doesn't feel instant
+      setTimeout(switchPlayerOrEnd, TURN_PAUSE_MS);
     }
   }
 }
