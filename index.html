@@ -174,7 +174,7 @@
     </div>
     <div id="status">Your turn — drag back from your token and release to shoot</div>
     <div id="board-wrap">
-      <canvas id="board" width="1200" height="680"></canvas>
+      <canvas id="board" width="1200" height="780"></canvas>
       <div id="overlay">
         <h2 id="overlay-title">Game Over</h2>
         <button id="overlay-restart">Play Again</button>
@@ -231,7 +231,7 @@ const MAX_SPEED = 22;
 
 // ---- Arc transform (logical space -> curved screen space) ----
 const CANVAS_W = canvas.width, CANVAS_H = canvas.height;
-const ARC_SAGITTA = 260; // how far the centerline bulges upward across the full width
+const ARC_SAGITTA = 340; // how far the centerline bulges upward across the full width
 const ARC_HALF_W = W / 2;
 const ARC_R = (ARC_HALF_W * ARC_HALF_W + ARC_SAGITTA * ARC_SAGITTA) / (2 * ARC_SAGITTA);
 const ARC_THETA_MAX = Math.asin(ARC_HALF_W / ARC_R);
