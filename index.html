@@ -215,7 +215,7 @@ const RAIL = 16;                 // margin between logical edge and the capsule 
 const CAP_R = (H - RAIL * 2) / 2; // radius of the curved end caps
 const BODY_LEFT_X = RAIL + CAP_R; // where the left curve meets the straight body
 const BODY_RIGHT_X = W - RAIL - CAP_R;
-const TOKEN_R = 21;
+const TOKEN_R = 19;
 const FRICTION = 0.985;
 const STOP_SPEED = 0.06;
 const MAX_PULL = 130;
@@ -538,39 +538,15 @@ function draw() {
 
   const segs = boundarySegments();
   const boundary = boundaryScreenPoints(segs);
-  const leftCapScreen = toScreen(BODY_LEFT_X, CENTER_Y);
-  const rightCapScreen = toScreen(BODY_RIGHT_X, CENTER_Y);
 
-  // capsule board fill: blue (computer, left) to red (you, right), through a soft neutral middle
-  pathFromPoints(boundary);
-  const grad = ctx.createLinearGradient(leftCapScreen.x, 0, rightCapScreen.x, 0);
-  grad.addColorStop(0, '#bdeaff');
-  grad.addColorStop(0.3, '#6cc6f5');
-  grad.addColorStop(0.5, '#f1edf9');
-  grad.addColorStop(0.7, '#ffb0c4');
-  grad.addColorStop(1, '#ff8098');
-  ctx.fillStyle = grad;
-  ctx.fill();
-
+  // capsule board fill: flat blue (computer, left) vs flat red (you, right)
   ctx.save();
   pathFromPoints(boundary);
   ctx.clip();
-
-  // soft glow near each cap — cool blue on the computer's end, warm red on yours
-  const sunL = ctx.createRadialGradient(leftCapScreen.x - CAP_R * 0.3, leftCapScreen.y, 4, leftCapScreen.x - CAP_R * 0.3, leftCapScreen.y, CAP_R * 1.4);
-  sunL.addColorStop(0, 'rgba(255,255,255,0.6)');
-  sunL.addColorStop(0.5, 'rgba(180,230,255,0.25)');
-  sunL.addColorStop(1, 'rgba(180,230,255,0)');
-  ctx.fillStyle = sunL;
-  ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
-
-  const sunR = ctx.createRadialGradient(rightCapScreen.x + CAP_R * 0.3, rightCapScreen.y, 4, rightCapScreen.x + CAP_R * 0.3, rightCapScreen.y, CAP_R * 1.4);
-  sunR.addColorStop(0, 'rgba(255,255,255,0.5)');
-  sunR.addColorStop(0.5, 'rgba(255,150,170,0.25)');
-  sunR.addColorStop(1, 'rgba(255,150,170,0)');
-  ctx.fillStyle = sunR;
-  ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
-
+  ctx.fillStyle = '#6cc6f5';
+  ctx.fillRect(0, 0, ARC_CX, CANVAS_H);
+  ctx.fillStyle = '#ff7d95';
+  ctx.fillRect(ARC_CX, 0, CANVAS_W - ARC_CX, CANVAS_H);
   ctx.restore();
 
   // solid rails (top/bottom): tokens rebound here — drawn as a raised wall
