@@ -234,10 +234,9 @@ const ctx = canvas.getContext('2d');
 const W = 960, H = 460;
 const CENTER_X = W / 2;
 const CENTER_Y = H / 2;
-const RAIL = 16;                 // margin between logical edge and the capsule outline
-const CAP_R = (H - RAIL * 2) / 2; // radius of the curved end caps
-const BODY_LEFT_X = RAIL + CAP_R; // where the left curve meets the straight body
-const BODY_RIGHT_X = W - RAIL - CAP_R;
+const RAIL = 16;          // margin between logical edge and the board outline
+const BODY_LEFT_X = RAIL; // left edge of the (now square-ended) board
+const BODY_RIGHT_X = W - RAIL;
 const TOKEN_R = 13;
 const FRICTION = 0.985;
 const STOP_SPEED = 0.06;
@@ -263,11 +262,8 @@ function flatToLogical(sx, sy) {
   return { x: sx - ARC_CX + CENTER_X, y: sy - ARC_APEX_Y + CENTER_Y };
 }
 
-// Build screen-space polylines tracing the capsule outline by sampling the
-// logical boundary (straight rails + semicircular caps) and warping each point.
-// Returned as separate segments so solid rails (tokens rebound) can be styled
-// differently from the open end caps (tokens fall off, opponent gets a bonus).
-const CAP_STEPS = 28;
+// Build screen-space polylines tracing the (square-ended) board outline.
+// Returned as separate segments purely so the rendering code can name them.
 const EDGE_STEPS = 20;
 
 function boundarySegments() {
@@ -276,21 +272,13 @@ function boundarySegments() {
     const x = BODY_LEFT_X + ((BODY_RIGHT_X - BODY_LEFT_X) * i) / EDGE_STEPS;
     topRail.push(toScreen(x, RAIL));
   }
-  const rightCap = [];
-  for (let i = 0; i <= CAP_STEPS; i++) {
-    const a = -Math.PI / 2 + (Math.PI * i) / CAP_STEPS;
-    rightCap.push(toScreen(BODY_RIGHT_X + CAP_R * Math.cos(a), CENTER_Y + CAP_R * Math.sin(a)));
-  }
+  const rightCap = [toScreen(BODY_RIGHT_X, RAIL), toScreen(BODY_RIGHT_X, H - RAIL)];
   const bottomRail = [];
   for (let i = 0; i <= EDGE_STEPS; i++) {
     const x = BODY_RIGHT_X - ((BODY_RIGHT_X - BODY_LEFT_X) * i) / EDGE_STEPS;
     bottomRail.push(toScreen(x, H - RAIL));
   }
-  const leftCap = [];
-  for (let i = 0; i <= CAP_STEPS; i++) {
-    const a = Math.PI / 2 + (Math.PI * i) / CAP_STEPS;
-    leftCap.push(toScreen(BODY_LEFT_X + CAP_R * Math.cos(a), CENTER_Y + CAP_R * Math.sin(a)));
-  }
+  const leftCap = [toScreen(BODY_LEFT_X, H - RAIL), toScreen(BODY_LEFT_X, RAIL)];
   return { topRail, rightCap, bottomRail, leftCap };
 }
 
