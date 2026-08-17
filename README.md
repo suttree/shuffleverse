@@ -5,6 +5,11 @@ A browser-based physics game inspired by the pub game Shuffle (and shuffleboard/
 ![Shuffleverse title screen](screenshots/attract.png)
 ![Shuffleverse gameplay](screenshots/gameplay.png)
 
+**Video previews:** [title screen → play](videos/intro.mp4) · [live gameplay, a real shot resolving](videos/gameplay.mp4)
+
+<video src="videos/intro.mp4" controls width="450"></video>
+<video src="videos/gameplay.mp4" controls width="450"></video>
+
 Play it by opening `index.html` in a browser, or serve the folder locally:
 
 ```bash
