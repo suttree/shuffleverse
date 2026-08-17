@@ -169,10 +169,118 @@
     cursor: pointer;
     font-weight: 700;
   }
+
+  /* ---- Attract / title screen ---- */
+  #attract {
+    position: fixed;
+    inset: 0;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: radial-gradient(circle at 50% 30%, rgba(34,31,54,0.55), rgba(27,26,43,0.88) 70%);
+    backdrop-filter: blur(2px);
+  }
+  #attract.hidden { display: none; }
+  .attract-card {
+    width: 100%;
+    max-width: 460px;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 18px;
+  }
+  .attract-title {
+    margin: 0;
+    font-size: 44px;
+    letter-spacing: 6px;
+    text-transform: uppercase;
+    font-weight: 700;
+    background: linear-gradient(90deg, var(--sunrise), var(--p1-color), var(--sunset), var(--p2-color));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .attract-tagline {
+    margin: 0;
+    font-size: 14px;
+    opacity: 0.8;
+    line-height: 1.5;
+  }
+  .attract-vs {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    font-size: 13px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    opacity: 0.9;
+  }
+  .attract-chip {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 14px;
+    border-radius: 16px;
+    background: var(--panel);
+    border: 1px solid rgba(255,255,255,0.1);
+  }
+  .attract-dot { width: 10px; height: 10px; border-radius: 50%; }
+  .attract-dot.red { background: var(--p1-color); }
+  .attract-dot.blue { background: var(--p2-color); }
+  .attract-rules {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    font-size: 13px;
+    opacity: 0.85;
+    text-align: left;
+    width: 100%;
+  }
+  .attract-rules li { display: flex; gap: 8px; }
+  .attract-rules li::before { content: "•"; color: var(--p1-color); font-weight: 700; }
+  #play-btn {
+    margin-top: 4px;
+    background: linear-gradient(90deg, var(--p1-color), var(--p2-color));
+    color: #1b1a2b;
+    border: none;
+    padding: 14px 42px;
+    border-radius: 26px;
+    font-size: 16px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    cursor: pointer;
+    font-weight: 700;
+    box-shadow: 0 6px 24px rgba(255,77,109,0.25);
+  }
+  #play-btn:hover { filter: brightness(1.08); }
 </style>
 </head>
 <body>
   <div id="starfield"></div>
+  <div id="attract">
+    <div class="attract-card">
+      <h1 class="attract-title">Shuffleverse</h1>
+      <p class="attract-tagline">Push your tokens across the line into enemy territory to score. Knock theirs back — or off the board entirely — to defend.</p>
+      <div class="attract-vs">
+        <div class="attract-chip"><span class="attract-dot red"></span>You</div>
+        <span>vs</span>
+        <div class="attract-chip"><span class="attract-dot blue"></span>Computer</div>
+      </div>
+      <ul class="attract-rules">
+        <li>Drag back from your token and release to shoot — power and direction follow your drag.</li>
+        <li>Land in the opposite color's territory to score. Sitting on your own side scores nothing.</li>
+        <li>There are no walls — a token that goes off the board is lost, unless it fell off on its own side, which gets it replaced.</li>
+        <li>5 tokens each to start. Most scoring tokens once everyone's out wins.</li>
+      </ul>
+      <button id="play-btn">Play</button>
+    </div>
+  </div>
   <div id="app">
     <h1>Shuffleverse</h1>
     <div id="hud">
@@ -768,6 +876,10 @@ function loop() {
 
 document.getElementById('restart').addEventListener('click', resetGame);
 document.getElementById('overlay-restart').addEventListener('click', resetGame);
+document.getElementById('play-btn').addEventListener('click', () => {
+  document.getElementById('attract').classList.add('hidden');
+  resetGame();
+});
 
 resetGame();
 setInterval(loop, 16);
