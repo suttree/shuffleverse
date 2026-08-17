@@ -94,7 +94,22 @@
   #p2-box .value { color: var(--p2-color); }
   #p1-box { box-shadow: 0 0 0 1px rgba(255,158,203,0.15) inset; }
   #p2-box { box-shadow: 0 0 0 1px rgba(142,205,240,0.15) inset; }
-  .tokens-left { font-size: 11px; opacity: 0.55; }
+  .token-dots {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 4px;
+    max-width: 84px;
+  }
+  .token-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    box-sizing: border-box;
+  }
+  .token-dot.filled.p1 { background: #ff3355; }
+  .token-dot.filled.p2 { background: #0d99ff; }
+  .token-dot.empty { background: transparent; border: 1.5px solid rgba(255,255,255,0.25); }
   #status {
     font-size: 14px;
     min-height: 20px;
@@ -164,17 +179,17 @@
       <div class="score-box" id="p1-box">
         <div class="label">You</div>
         <div class="value" id="p1-score">0</div>
-        <div class="tokens-left" id="p1-left">5 tokens left</div>
+        <div class="token-dots" id="p1-dots"></div>
       </div>
       <div class="score-box" id="p2-box">
         <div class="label">Computer</div>
         <div class="value" id="p2-score">0</div>
-        <div class="tokens-left" id="p2-left">5 tokens left</div>
+        <div class="token-dots" id="p2-dots"></div>
       </div>
     </div>
     <div id="status">Your turn — drag back from your token and release to shoot</div>
     <div id="board-wrap">
-      <canvas id="board" width="1200" height="780"></canvas>
+      <canvas id="board" width="1000" height="500"></canvas>
       <div id="overlay">
         <h2 id="overlay-title">Game Over</h2>
         <button id="overlay-restart">Play Again</button>
@@ -229,29 +244,18 @@ const STOP_SPEED = 0.06;
 const MAX_PULL = 130;
 const MAX_SPEED = 22;
 
-// ---- Arc transform (logical space -> curved screen space) ----
+// ---- Screen transform (logical space -> screen space) ----
+// Flat/straight board: a plain translation, no bend. Kept as two named
+// functions (toScreen for the board outline, flatToScreen for tokens/shots)
+// since other code still calls both — they're equivalent here.
 const CANVAS_W = canvas.width, CANVAS_H = canvas.height;
-const ARC_SAGITTA = 340; // how far the centerline bulges upward across the full width
-const ARC_HALF_W = W / 2;
-const ARC_R = (ARC_HALF_W * ARC_HALF_W + ARC_SAGITTA * ARC_SAGITTA) / (2 * ARC_SAGITTA);
-const ARC_THETA_MAX = Math.asin(ARC_HALF_W / ARC_R);
 const ARC_CX = CANVAS_W / 2;
-const ARC_APEX_Y = 300; // screen y of the centerline at the arc's peak (x = CENTER_X)
-const ARC_CY = ARC_APEX_Y + ARC_R;
+const ARC_APEX_Y = CANVAS_H / 2;
 
 function toScreen(x, y) {
-  const theta = ((x - CENTER_X) / ARC_HALF_W) * ARC_THETA_MAX;
-  const dy = y - CENTER_Y;
-  const r = ARC_R - dy;
-  return {
-    x: ARC_CX + r * Math.sin(theta),
-    y: ARC_CY - r * Math.cos(theta),
-  };
+  return { x: ARC_CX + (x - CENTER_X), y: ARC_APEX_Y + (y - CENTER_Y) };
 }
 
-// Tokens and shots render with a flat (unwarped) mapping, aligned to the arc's
-// apex, so pucks travel in true straight lines while only the board surface
-// underneath them is curved.
 function flatToScreen(x, y) {
   return { x: ARC_CX + (x - CENTER_X), y: ARC_APEX_Y + (y - CENTER_Y) };
 }
@@ -340,8 +344,8 @@ let pendingMessage = null;
 
 const p1ScoreEl = document.getElementById('p1-score');
 const p2ScoreEl = document.getElementById('p2-score');
-const p1LeftEl = document.getElementById('p1-left');
-const p2LeftEl = document.getElementById('p2-left');
+const p1DotsEl = document.getElementById('p1-dots');
+const p2DotsEl = document.getElementById('p2-dots');
 const statusEl = document.getElementById('status');
 const overlay = document.getElementById('overlay');
 const overlayTitle = document.getElementById('overlay-title');
@@ -398,12 +402,23 @@ function computeScores() {
   return { s1, s2 };
 }
 
+function renderTokenDots(container, playerClass, total, remaining) {
+  const needed = total;
+  while (container.children.length < needed) container.appendChild(document.createElement('div'));
+  while (container.children.length > needed) container.removeChild(container.lastChild);
+  for (let i = 0; i < needed; i++) {
+    const dot = container.children[i];
+    const filled = i < remaining;
+    dot.className = `token-dot ${filled ? `filled ${playerClass}` : 'empty'}`;
+  }
+}
+
 function updateHUD() {
   const { s1, s2 } = computeScores();
   p1ScoreEl.textContent = s1;
   p2ScoreEl.textContent = s2;
-  p1LeftEl.textContent = `${Math.max(0, shotsAllowed[1] - shotsTaken[1])} tokens left`;
-  p2LeftEl.textContent = `${Math.max(0, shotsAllowed[2] - shotsTaken[2])} tokens left`;
+  renderTokenDots(p1DotsEl, 'p1', shotsAllowed[1], Math.max(0, shotsAllowed[1] - shotsTaken[1]));
+  renderTokenDots(p2DotsEl, 'p2', shotsAllowed[2], Math.max(0, shotsAllowed[2] - shotsTaken[2]));
 }
 
 function endGame() {
@@ -512,21 +527,28 @@ function stepPhysics() {
     }
 
     // No walls anywhere — the whole perimeter is open. A token that crosses
-    // the boundary (top, bottom, or either end) falls off and is awarded to
-    // whichever player owns that side of the board (blue/left = computer,
-    // red/right = you). Tokens render at a flat position while the board
-    // outline is curved, so the check compares that same rendered point
-    // against the actual drawn outline, matching what the player sees.
+    // the boundary (top, bottom, or either end) falls off. If it fell off on
+    // its OWNER's own side of the board, they get a replacement token; if it
+    // fell off on the opponent's side, it's lost for good — no bonus to
+    // anyone. Tokens render at a flat position while the board outline is
+    // curved, so the check compares that same rendered point against the
+    // actual drawn outline, matching what the player sees.
     const screenPos = flatToScreen(t.x, t.y);
     if (!pointInPolygon(screenPos.x, screenPos.y, BOUNDARY_POLY)) {
       t.outOfBounds = true;
       t.moving = false;
 
-      const beneficiary = t.x > CENTER_X ? 1 : 2;
-      shotsAllowed[beneficiary]++;
-      pendingMessage = beneficiary === 1
-        ? 'Off the board! You get a bonus token.'
-        : 'Off the board! Computer gets a bonus token.';
+      const exitSide = t.x > CENTER_X ? 1 : 2; // 1 = red/right = your side, 2 = blue/left = computer's side
+      if (exitSide === t.owner) {
+        shotsAllowed[t.owner]++;
+        pendingMessage = t.owner === 1
+          ? 'Off your own side — you get the token back.'
+          : "Off the computer's own side — they get it back.";
+      } else {
+        pendingMessage = t.owner === 1
+          ? 'Lost off the far side!'
+          : 'Computer lost a token off the far side!';
+      }
     }
   }
 
