@@ -2,6 +2,8 @@
 
 A browser-based physics game inspired by the pub game Shuffle (and shuffleboard/curling) — push tokens across the board into your side to score, or knock the opponent's tokens off the board. Built with plain HTML5 canvas and vanilla JS, no dependencies, no build step.
 
+![Shuffleverse gameplay](screenshots/gameplay.png)
+
 Play it by opening `index.html` in a browser, or serve the folder locally:
 
 ```bash
